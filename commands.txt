@@ -1,0 +1,39 @@
+docker-compose up -d
+docker-compose logs pg
+
+[alembic]
+alembic init -t async migration
+alembic revision --autogenerate -m 'correct table'
+# look at alembic/versions
+# If evrth is OK -
+alembic upgrade head
+# down
+alembic downgrade -1
+alembic downgrade base
+# потом удалить миграцию
+
+[sqlalchemy]
+# чтобы применить naming convention - добавляем в config.py class DatabaseConfig
+naming_convention: dict[str, str] = {
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+
+вносим в базовую модель
+metadata = MetaData(
+        naming_convention=settings.db.naming_convention,
+    )
+
+[black]
+black --check --diff config.py
+black linter_project
+
+[pytest]
+docker-compose exec web pytest
+pytest tests
+
+[isort]
+isort .
