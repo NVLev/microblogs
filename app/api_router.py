@@ -6,6 +6,8 @@ from fastapi import (
                     HTTPException,
                     status,
                     Request,
+                    UploadFile,
+                    File
                 )
 from sqlalchemy.ext.asyncio import (
                                     AsyncSession,
@@ -14,7 +16,7 @@ from sqlalchemy.ext.asyncio import (
 from app.base_models import Tweet
 from app.basic_schema import (
     UserRead,
-    TweetCreate, TweetResponse, TweetRead, ResultBase
+    TweetCreate, TweetResponse, TweetRead, ResultBase, MediaRead
 )
 from app.functions import (
     get_user_id_by_api_key,
@@ -23,7 +25,11 @@ from app.functions import (
     get_tweets_info,
     get_tweet_by_id,
     delete_tweet_by_id,
-    add_like, delete_like, check_follow_user, create_follow_to_user
+    add_like,
+    delete_like,
+    check_follow_user,
+    create_follow_to_user,
+    delete_following_by_id, update_tweet_with_media, save_media, get_media
 )
 from app.db_helper import db_helper
 from app.config import logger
@@ -75,11 +81,6 @@ async def get_user(id: int,
             raise HTTPException(
                 status_code=401, detail="Ошибка ввода данных"
             )
-        # else:
-        #     logger.error(f"id={id} не найден")
-        #     raise HTTPException(
-        #         status_code=401, detail="Ошибка ввода данных"
-        #     )
 
     except SQLAlchemyError as e:
         logger.error(f"ошибка в get_user: {str(e)}", exc_info=True)
@@ -112,7 +113,8 @@ async def get_tweets(request: Request,
 
 
     except SQLAlchemyError as e:
-        logger.error(f"Ошибка в get_tweets. Детали: {str(e.__dict__['orig'])}")
+        error_message = str(e)
+        logger.error(f"Ошибка в get_tweets. Детали: {error_message}")
         raise HTTPException(
             status_code=400, detail="Запрос не обработан. Ошибка на стороне сервера"
         )
@@ -135,7 +137,10 @@ async def create_tweet(
         tweet_id: int = await write_new_tweet(user_id=user_id, content=tweet_data.tweet_data, session=session)
         image_ids: list[int] = tweet_data.image_ids
         if image_ids:
-            pass
+            logger.info(f'обнаружены изображения {image_ids}')
+            await update_tweet_with_media(
+                    media_ids=image_ids, tweet_id=tweet_id, session=session
+                    )
         logger.info('Твит добавлен')
         return {
             "result": True,
@@ -144,6 +149,47 @@ async def create_tweet(
     except SQLAlchemyError as e:
         logger.error(f"Error in create_tweet: {str(e)}", exc_info=True)
         return JSONResponse(status_code=400, content={"result": "false", "error": str(e)})
+
+@router.post(
+    "/medias",
+    summary="Добавление изображения к твиту",
+    description="Эндпоинт для добавления изображения к твиту",
+    response_model=MediaRead,
+    status_code=201,
+)
+async def post_media_with_tweet(
+                        request:Request,
+                        file: UploadFile = File(...),
+                        session: AsyncSession = Depends(db_helper.session_getter)
+                             ):
+    try:
+        api_key: str = request.headers.get("api-key")
+        logger.info(f"Получен запрос POST MEDIA для API key: {api_key}")
+        user_id = await get_user_id_by_api_key(session=session, api_key=api_key)
+        if user_id:
+            file_url = f"{api_key}_{file.filename}"
+            media = await get_media(file_url=file_url, session=session)
+            if media:
+                return {"result": True, "media_id": media.id}
+            else:
+                media_id = await save_media(session=session, file=file, file_url=file_url, user_id=user_id)
+                return {"result": True, "media_id": media_id}
+
+        else:
+                logger.error(f"id={id} не найден")
+                raise HTTPException(
+                    status_code=401, detail="Ошибка ввода данных"
+            )
+
+    except SQLAlchemyError as e:
+        error_message = str(e)
+        logger.error(
+            f"POST запрос на /medias. Детали: {error_message}"
+        )
+        raise HTTPException(
+            status_code=400, detail="Запрос не обработан. Ошибка на стороне сервера"
+        )
+
 
 @router.post(
     "/tweets/{id}/likes",
@@ -175,8 +221,9 @@ async def post_like_to_tweet(
                 status_code=401, detail="Ошибка ввода данных"
                 )
     except SQLAlchemyError as e:
+        error_message = str(e)
         logger.error(
-            f"POST запрос на /tweets/{id}/likes. Детали: {str(e.__dict__['orig'])}"
+            f"POST запрос на /tweets/{id}/likes. Детали: {error_message}"
         )
         raise HTTPException(
             status_code=400, detail="Запрос не обработан. Ошибка на стороне сервера"
@@ -217,8 +264,9 @@ async def delete_likes_from_tweet(request: Request,
             )
 
     except SQLAlchemyError as e:
+        error_message = str(e)
         logger.error(
-            f"DELETE запрос на /tweets/{id}. Детали: {str(e.__dict__['orig'])}"
+            f"DELETE запрос на /tweets/{id}. Детали: {error_message}"
         )
         raise HTTPException(
             status_code=400, detail="Запрос не обработан. Ошибка на стороне сервера"
@@ -247,7 +295,7 @@ async def delete_tweet(request: Request,
                     logger.info(f"Лайк удален")
                     await delete_tweet_by_id(tweet_id=id, session=session)
                     logger.info('Твит удален')
-                return {"result": True}
+                    return {"result": True}
             else:
                 logger.info(f'Пользователь id {id} не является автором твита. Удаление запрещено')
                 raise HTTPException(
@@ -260,8 +308,9 @@ async def delete_tweet(request: Request,
                 status_code=401, detail="Ошибка ввода данных"
             )
     except SQLAlchemyError as e:
+        error_message = str(e)
         logger.error(
-            f"DELETE запрос на /tweets/{id}. Детали: {str(e.__dict__['orig'])}"
+            f"DELETE запрос на /tweets/{id}. Детали: {error_message}"
         )
         raise HTTPException(
             status_code=400, detail="Запрос не обработан. Ошибка на стороне сервера"
@@ -271,7 +320,7 @@ async def delete_tweet(request: Request,
 @router.post(
     "/users/{id}/follow",
     summary="Подписка на пользователя",
-    description="Endpoint для предоставление возможности зафоловить другого пользователя",
+    description="Endpoint для предоставления возможности зафоловить другого пользователя",
     response_model=ResultBase,
     status_code=202,
 )
@@ -322,4 +371,50 @@ async def post_follow_to_user(
             raise HTTPException(
                 status_code=400,
                 detail="Запрос не обработан. Ошибка на стороне сервера"
+            )
+
+@router.delete(
+"/users/<id>/follow",
+    summary="Удаление подписки на другого пользователя",
+    description="Endpoint по удалению подписки на другого пользователя",
+    response_model=ResultBase,
+    status_code=202,
+)
+async def delete_follow_from_user(
+request: Request,
+        id: int,
+        session: AsyncSession = Depends(db_helper.session_getter),
+):
+    try:
+        api_key: str = request.headers.get("api-key")
+        logger.info(f"Получен запрос DELETE для user ID: {id}, API key: {api_key}")
+        follower_id = await get_user_id_by_api_key(session=session, api_key=api_key)
+        if not follower_id:
+            logger.error(f"id={id} не найден")
+            raise HTTPException(status_code=401, detail="Ошибка получения ID")
+        is_already_following = await check_follow_user(
+            user_id=follower_id,
+            following_id=id,
+            session=session
+        )
+
+        if is_already_following:
+            logger.info(f"Пользователь {follower_id} подписан на {id}, подписка подтврждена")
+            await delete_following_by_id(
+                follower_id=follower_id,
+                following_id=id,
+                session=session
+            )
+            return {"result": True}
+        else:
+            logger.info(f"Пользователь {follower_id} не подписан на {id}, удаление невозможно")
+            raise HTTPException(status_code=401, detail="Подписки не существует")
+
+    except SQLAlchemyError as e:
+        await session.rollback()
+        error_message = str(e)
+        logger.error(f"DELETE запрос на /{id}/follow. Детали: {error_message}")
+        raise HTTPException(
+            status_code=400,
+            detail="Запрос не обработан. Ошибка на стороне сервера"
             )

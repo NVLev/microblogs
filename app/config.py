@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     )
     run: RunConfig = RunConfig()
     db: DatabaseConfig = DatabaseConfig(
-        url="postgresql+asyncpg://user:password@localhost:5432/recipes"
+        url="postgresql+asyncpg://user:password@localhost:5432/microblogs"
     )
 
 

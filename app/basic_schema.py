@@ -58,6 +58,9 @@ class TweetResponse(BaseModel):
     result: bool
     tweet_id: int
 
+class MediaRead(BaseModel):
+    result: bool
+    media_id: int
 
 
 class FollowingCreate(BaseModel):

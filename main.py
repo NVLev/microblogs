@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from app.base_models import Base, User, Follow
 import uvicorn
@@ -51,8 +52,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(api_router)
 app.include_router(base_router, prefix='')
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
+# app.mount("/", StaticFiles(directory="static", html=True), name="static")
+static_dir = os.path.join(os.path.dirname(__file__), 'static')
+if os.path.exists(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+else:
+    print("Static directory not found, skipping static file mount")
 
 @app.middleware("http")
 async def log_requests(request, call_next):

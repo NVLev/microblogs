@@ -1,18 +1,19 @@
+import os
 from typing import Optional, Type
 
-from fastapi import HTTPException, status
-from sqlalchemy import select, insert, delete, func
+from fastapi import HTTPException, status, UploadFile
+from sqlalchemy import select, insert, delete, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, InstrumentedAttribute, load_only
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from pydantic import ValidationError
 
-from app.base_models import User, Tweet, Like, Follow
+from app.base_models import User, Tweet, Like, Follow, Image
 from app.basic_schema import UserRead, TweetBase, UserBase, LikeBase, ResultBase, UserData
 from app.config import logger
 
 async def get_api_key(request):
-    logger.info('Стартанули получение апи ключа')
+    logger.info('Начали процесс получение апи ключа')
     api_key = request.headers.get("Authorization")
     if not api_key:
         raise HTTPException(
@@ -26,16 +27,24 @@ async def get_user_id_by_api_key(
     session: AsyncSession, api_key: str
 ) -> InstrumentedAttribute[int] | None:
     logger.info('Стартанули получение id ')
-    stmt = (
-        select(User)
-        .where(User.api_key == api_key)
-    )
-    result = await session.execute(stmt)
-    user = result.scalar_one_or_none()
-    if user:
-        logger.info(f'user id - {user.id}')
-        return user.id
-    return None
+    try:
+        stmt = (
+            select(User)
+            .where(User.api_key == api_key)
+        )
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            logger.info(f'user id - {user.id}')
+            return user.id
+        return None
+    except ValidationError as e:
+        logger.error(f"Ошибка валидации Pydantic: {e}")
+        raise HTTPException(status_code=422, detail=f"Ошибка валидации: {e}")
+    except SQLAlchemyError as e:
+        logger.error(f"Ошибка базы данных: {e}")
+        await session.rollback()
+        raise HTTPException(status_code=500, detail="Database error")
 
 async def get_user_by_id(
     session: AsyncSession, user_id: int
@@ -97,6 +106,52 @@ async def write_new_tweet(user_id: id, content: str, session: AsyncSession) -> i
     logger.info(f'tweet id - {tweet_id}')
     return tweet_id
 
+async def update_tweet_with_media(
+    media_ids: list[int],
+    tweet_id: int,
+    session: AsyncSession,
+) -> None:
+    try:
+        for media_id in media_ids:
+            update_tweet_id_query = (
+                update(Image).where(Image.id == media_id).values(tweet_id=tweet_id)
+            )
+            await session.execute(update_tweet_id_query)
+            await session.commit()
+    except SQLAlchemyError as e:
+        error_message = e
+        raise HTTPException(status_code=400, detail={error_message})
+
+async def get_media(file_url: str, session: AsyncSession) -> Image | None:
+    stmt = select(Image).where(Image.url == file_url)
+    image = await session.execute(stmt)
+    image = image.scalars().one_or_none()
+    return image
+
+
+async def save_media(session: AsyncSession, file: UploadFile, user_id: int, file_url: str):
+    try:
+
+
+        stmt = insert(Image).values(url=file_url).returning(Image.id)
+        image_id = await session.execute(stmt)
+        await session.commit()
+        image_id = image_id.scalar_one()
+
+        if not os.path.exists("media"):
+            os.makedirs("media")
+        filepath = f"media/{file.filename}"
+        with open(filepath, "wb") as buffer:
+            contents = await file.read()
+            buffer.write(contents)
+        return image_id
+
+    except IntegrityError as e:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=f"Ошибка базы данных: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при сохранениии файла: {e}")
+                            
 async def get_tweets_info(session: AsyncSession):
     select_query = (
         select(Tweet)
@@ -143,6 +198,9 @@ async def add_like(user_id: int, tweet_id: int, session: AsyncSession):
         await session.rollback()
         raise HTTPException(status_code=500, detail="Database error")
 
+
+
+
 async def delete_like(user_id: int, tweet_id: int, session: AsyncSession):
     await session.execute(
         delete(Like).filter(Like.tweet_id == tweet_id, Like.user_id == user_id)
@@ -155,6 +213,14 @@ async def delete_tweet_by_id(tweet_id: int, session: AsyncSession) -> None:
     await session.execute(stmt)
     await session.commit()
 
+async def delete_following_by_id(follower_id: int, following_id: int, session: AsyncSession) -> None:
+    stmt = delete(Follow).where(
+        Follow.follower_id == follower_id,
+        Follow.following_id == following_id
+    )
+    await session.execute(stmt)
+    await session.commit()
+    logger.info('Подписка благополучно удалилась')
 
 async def check_follow_user(user_id: int, following_id: int, session: AsyncSession):
     """Проверяет наличие подписки на пользователя."""
@@ -168,7 +234,7 @@ async def check_follow_user(user_id: int, following_id: int, session: AsyncSessi
     return count > 0
 
 
-async def create_follow_to_user(follower_id: int, following_id: int, session: AsyncSession):
+async def create_follow_to_user(follower_id: int, following_id: int, session: AsyncSession) -> bool:
     """Создает новую подписку на пользователя."""
     try:
         logger.info('Начали создание новой подписки')
@@ -181,5 +247,5 @@ async def create_follow_to_user(follower_id: int, following_id: int, session: As
     except SQLAlchemyError as e:
         await session.rollback()
         logger.error(f"Ошибка создания подписки: {e}")
-        return False  # Failure
+        return False
 
