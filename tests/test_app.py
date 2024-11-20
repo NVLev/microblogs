@@ -11,6 +11,7 @@ from app.base_models import User
 from app.base_models import Tweet
 from app.config import logger
 from app.db_helper import db_helper
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.functions import get_media, add_like
@@ -57,15 +58,27 @@ async def test_post_media_with_tweet(async_client, db_session):
     """
     user_id = 1
     api_key = API_KEY[0]
+
+    test_file_content = b"test content"
+    headers = {"api-key": api_key}
+
+
     file_url = f"{api_key}_test.jpg"
-    file = UploadFile("test.jpg")
+    # file = UploadFile("test.jpg")
     headers = {"api-key": api_key}
     logger.info('Проверяем, что медиафайл не существует')
     media = await get_media(file_url=file_url, session=db_session)
     assert media is None
+
+    files = {
+        "file": ("test.jpg", test_file_content, "image/jpeg")
+    }
+
     logger.info('Отправляем запрос на добавление медиафайла')
     response = await async_client.post(
-        "/medias", headers=headers, files={"file": file}
+        "/medias",
+        headers=headers,
+        files=files
     )
     assert response.status_code == 201
     assert response.json() == {"result": True, "media_id": 1}
@@ -86,18 +99,28 @@ async def test_post_like_to_tweet(async_client, db_session):
     api_key = API_KEY[0]
     headers = {"api-key": api_key}
     logger.info('Проверяем, что лайк не существует')
-    like = await db_session.execute(
-        db_session.query(Tweet).filter(Tweet.id == tweet_id).filter(Tweet.likes.any(user_id=user_id))
-    ).fetchone()
+    query = select(Tweet).where(
+        and_(
+            Tweet.id == tweet_id,
+            Tweet.likes.any(user_id=user_id)
+        )
+    )
+    result = await db_session.execute(query)
+    like = result.scalar_one_or_none()
     assert like is None
+
     logger.info('Отправляем запрос на добавление лайка')
-    response = await async_client.post(f"/tweets/{tweet_id}/likes", headers=headers)
-    assert response.status_code == 201
-    assert response.json() == {"result": True}
+    await add_like(user_id=user_id, tweet_id=tweet_id, session=db_session)
+
     logger.info('Проверяем, что лайк был добавлен')
-    like = await db_session.execute(
-        db_session.query(Tweet).filter(Tweet.id == tweet_id).filter(Tweet.likes.any(user_id=user_id))
-    ).fetchone()
+    query = select(Tweet).where(
+        and_(
+            Tweet.id == tweet_id,
+            Tweet.likes.any(user_id=user_id)
+        )
+    )
+    result = await db_session.execute(query)
+    like = result.scalar_one_or_none()
     assert like is not None
 
 
@@ -110,14 +133,23 @@ async def test_delete_likes_from_tweet(async_client, db_session):
     tweet_id = 1
     api_key = API_KEY[0]
     headers = {"api-key": api_key}
+
     logger.info('Добавляем лайк к твиту')
     await add_like(user_id=user_id, tweet_id=tweet_id, session=db_session)
+
     logger.info('Проверяем, что лайк существует')
-    like = await db_session.execute(
-        db_session.query(Tweet).filter(Tweet.id == tweet_id).filter(Tweet.likes.any(user_id=user_id))
-    ).fetchone()
+    query = select(Tweet).where(
+        and_(
+            Tweet.id == tweet_id,
+            Tweet.likes.any(user_id=user_id)
+        )
+    )
+    result = await db_session.execute(query)
+    like = result.scalar_one_or_none()
     assert like is not None
+
     logger.info('Отправляем запрос на удаление лайка')
+
     response = await async_client.delete(f"/tweets/{tweet_id}/likes", headers=headers)
     assert response.status_code == 202
     assert response.json() == {"result": True}

@@ -1,54 +1,72 @@
 import asyncio
 import os
-import sys
-from contextlib import asynccontextmanager
-from sqlalchemy import delete
+from typing import AsyncGenerator, Generator
+
+import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.orm import sessionmaker
 
-# from sqlalchemy.ext.asyncio import AsyncSession
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from main import app
-from app.db_helper import db_helper
-from app.base_models import User, Base  # Import Base for dropping tables
+from app.config import Settings, DatabaseConfig
+from app.db.models import Base
+from app.db_helper import DatabaseHelper
 
-NAMES = [
-    "Vasya Petrov",
-    "Petya Ivanov",
-    "Anna Shats",
-    "Serafima Re",
-    "Danila Sergeev",
-    "Joahim Abramyan",
-    "Katya Vetrova",
-    "Masha Petrova"
-]
+# Test database URL
+TEST_DATABASE_URL = "postgresql+asyncpg://user:password@localhost:5432/test_microblogs"
 
 
-@pytest_asyncio.fixture(scope="session")
-def event_loop(request):
+# Create test settings
+def get_test_settings() -> Settings:
+    test_db_config = DatabaseConfig(
+        url=TEST_DATABASE_URL,
+        echo=False,
+        echo_pool=False,
+        pool_size=5,
+        max_overflow=5
+    )
+    settings = Settings()
+    settings.db = test_db_config
+    return settings
+
+
+@pytest.fixture(scope="session")
+def event_loop() -> Generator:
+    """Create an instance of the default event loop for each test case."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
 
-@pytest_asyncio.fixture(scope="function")
-async def db_session():
-    @asynccontextmanager
-    async def session_context():
-        async for session in db_helper.session_getter():
-            try:
-                yield session
-            finally:
-                await session.rollback()
 
-    async with session_context() as session:
+@pytest_asyncio.fixture(scope="session")
+async def test_db_helper() -> AsyncGenerator[DatabaseHelper, None]:
+    """Create a test database helper instance."""
+    settings = get_test_settings()
+    db_helper = DatabaseHelper(
+        url=settings.db.url,
+        echo=settings.db.echo,
+        echo_pool=settings.db.echo_pool,
+        pool_size=settings.db.pool_size,
+        max_overflow=settings.db.max_overflow,
+    )
+
+    # Create all tables
+    async with db_helper.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield db_helper
+
+    # Cleanup
+    async with db_helper.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await db_helper.dispose()
+
+
+@pytest_asyncio.fixture
+async def test_session(test_db_helper) -> AsyncGenerator[AsyncSession, None]:
+    """Create a test database session."""
+    async with test_db_helper.session_factory() as session:
         yield session
-
-
-
-
-
-@pytest_asyncio.fixture(scope="function")
-async def async_client():
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        yield client
+        # Rollback any changes made in the test
+        await session.rollback()
