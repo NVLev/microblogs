@@ -1,6 +1,6 @@
 import os
 from contextlib import asynccontextmanager
-from app.base_models import Base, User, Follow
+from app.base_models import Base, User, Follow, Like, Tweet
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
         user5 = User(name=NAMES[4], api_key=API_KEY[4])
         session.add_all([user1, user2, user3, user4, user5])
         await session.commit()
+
     async with db_helper.engine.begin() as conn:
         await conn.execute(
             insert(Follow).values(follower_id=1, following_id=2)
@@ -42,6 +43,18 @@ async def lifespan(app: FastAPI):
         await session.execute(
             insert(Follow).values(follower_id=3, following_id=1)
         )
+        await session.commit()
+
+    async with db_helper.session_factory() as session:
+        tweet1 = Tweet(user_id=1, content = 'test content1')
+        tweet2 = Tweet(user_id=3, content = 'test content2')
+        session.add_all([tweet1, tweet2])
+        await session.commit()
+
+    async with db_helper.session_factory() as session:
+        like1 = Like(user_id=4, tweet_id=1)
+        like2 = Like(user_id=2, tweet_id=2)
+        session.add_all([like1, like2])
         await session.commit()
 
     yield

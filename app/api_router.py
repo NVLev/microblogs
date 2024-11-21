@@ -33,7 +33,7 @@ from app.functions import (
 )
 from app.db_helper import db_helper
 from app.config import logger
-from app.base_models import User
+from error_handling import handle_api_errors
 
 router = APIRouter(prefix='/api', tags=['Работа с микроблогами'])
 
@@ -59,19 +59,48 @@ test_user = {
         ]
     }
 }
-@router.get("/users/me", response_model=UserRead)
-async def get_users_me(api_key: str = None):
-    logger.info(api_key)
-    return test_user
 
-@router.get("/users/{id}", response_model=UserRead)
+@router.get(
+    "/users/me",
+    response_model=UserRead,
+    summary="Получение информации о своем профиле по api ключу",
+    description="Эндпоинт для получения информации о своем профиле",
+
+)
+@handle_api_errors()
+async def get_users_me(request: Request, session: AsyncSession = Depends(db_helper.session_getter),
+    ):
+
+    api_key: str = request.headers.get("api-key")
+    user_id = await get_user_id_by_api_key(session=session, api_key=api_key)
+    if user_id:
+        user = await get_user_by_id(session=session, user_id=user_id)
+        if user:
+            logger.info('Получен юзер')
+            return {"result": True, "user": user}
+        else:
+            logger.error(f"Пользователь с id={id} не найден")
+            raise HTTPException(
+                status_code=401, detail="Ошибка ввода данных"
+            )
+    else:
+        logger.error(f"id={id} не найден")
+        raise HTTPException(
+            status_code=401, detail="Ошибка ввода данных"
+        )
+
+
+@router.get(
+    "/users/{id}",
+    summary="Получение информации о пользователе по ID",
+    description="Эндпоинт для получения информации о пользователе в соответствии с его ID",
+response_model=UserRead,
+    status_code=200
+    )
 async def get_user(id: int,
         session: AsyncSession = Depends(db_helper.session_getter),
     ):
     try:
-        # api_key: str = request.headers.get("api-key")
-        # user_id = await get_user_id_by_api_key(session=session, api_key=api_key)
-        # if user_id:
         user = await get_user_by_id(session=session, user_id=id)
         if user:
             logger.info('Получен юзер')
@@ -331,6 +360,7 @@ async def post_follow_to_user(
 ):
     async with session.begin():
         try:
+            # api_key = 'api123'
             api_key: str = request.headers.get("api-key")
             logger.info(f"Получен запрос POST FOLLOW для user ID: {id}, API key: {api_key}")
 
@@ -374,7 +404,7 @@ async def post_follow_to_user(
             )
 
 @router.delete(
-"/users/<id>/follow",
+"/users/{id}/follow",
     summary="Удаление подписки на другого пользователя",
     description="Endpoint по удалению подписки на другого пользователя",
     response_model=ResultBase,
@@ -418,3 +448,4 @@ request: Request,
             status_code=400,
             detail="Запрос не обработан. Ошибка на стороне сервера"
             )
+
