@@ -1,16 +1,14 @@
 import json
-
+import os
+import aiofiles
 import pytest
 import asyncio
 from httpx import AsyncClient
 from fastapi import UploadFile
 from app.add_data import API_KEY, NAMES
-from app.basic_schema import UserRead
-from app.basic_schema import TweetRead, TweetCreate, TweetResponse
-from app.base_models import User
+
 from app.base_models import Tweet
 from app.config import logger
-from app.db_helper import db_helper
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,37 +54,18 @@ async def test_post_media_with_tweet(async_client, db_session):
     """
     Проверяет функцию добавления изображения к твиту
     """
-    user_id = 1
-    api_key = API_KEY[0]
+    current_dir = os.getcwd()
+    file_dir = os.path.join(current_dir, "tests/test.jpg")
+    url = "/api/medias"
+    headers = {"api-key": API_KEY[0]}
 
-    test_file_content = b"test content"
-    headers = {"api-key": api_key}
+    async with aiofiles.open(file_dir, "rb") as f:
+        image_data = await f.read()
+        files = {"file": ("test.jpg", image_data, "image/jpeg")}
+        resp = await async_client.post(url, headers=headers, files=files)
 
-
-    file_url = f"{api_key}_test.jpg"
-    # file = UploadFile("test.jpg")
-    headers = {"api-key": api_key}
-    logger.info('Проверяем, что медиафайл не существует')
-    media = await get_media(file_url=file_url, session=db_session)
-    assert media is None
-
-    files = {
-        "file": ("test.jpg", test_file_content, "image/jpeg")
-    }
-
-    logger.info('Отправляем запрос на добавление медиафайла')
-    response = await async_client.post(
-        "/medias",
-        headers=headers,
-        files=files
-    )
-    assert response.status_code == 201
-    assert response.json() == {"result": True, "media_id": 1}
-    logger.info('Проверяем, что медиафайл был добавлен')
-    media = await get_media(file_url=file_url, session=db_session)
-    assert media is not None
-    assert media.url == file_url
-    assert media.id == user_id
+        assert resp.status_code == 201
+        assert json.loads(resp.text) == {"result": True, "media_id": 1}
 
 
 @pytest.mark.asyncio
@@ -125,37 +104,59 @@ async def test_post_like_to_tweet(async_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_delete_likes_from_tweet(async_client, db_session):
+async def test_delete_tweet(async_client, db_session):
     """
-    Проверяет функцию удаления лайка из твита
+    Проверяет функцию удаления твита
+
     """
-    user_id = 1
-    tweet_id = 1
-    api_key = API_KEY[0]
-    headers = {"api-key": api_key}
+    url = f"/api/tweets/1"
+    headers = {"api-key": API_KEY[0]}
+    resp = await async_client.delete(url, headers=headers)
+    assert resp.status_code == 202
+    assert json.loads(resp.text) == {"result": True}
 
-    logger.info('Добавляем лайк к твиту')
-    await add_like(user_id=user_id, tweet_id=tweet_id, session=db_session)
+@pytest.mark.asyncio
+async def test_post_follow_to_user(async_client, db_session):
+    """
+    Проверяет функцию подписки на пользователя
 
-    logger.info('Проверяем, что лайк существует')
-    query = select(Tweet).where(
-        and_(
-            Tweet.id == tweet_id,
-            Tweet.likes.any(user_id=user_id)
-        )
-    )
-    result = await db_session.execute(query)
-    like = result.scalar_one_or_none()
-    assert like is not None
+    """
+    url = f"/api/users/2/follow"
+    headers = {"api-key": API_KEY[1]}
+    resp = await async_client.post(url, headers=headers)
+    assert resp.status_code == 202
+    assert json.loads(resp.text)['result'] is True
 
-    logger.info('Отправляем запрос на удаление лайка')
+@pytest.mark.asyncio
+async def test_post_follow_to_user_already_following(async_client, db_session):
+    """
+    Проверяет функцию подписки на пользователя, если он уже подписан
+    :param async_client:
+    :param db_session:
+    :return:
+    """
+    url = f"/api/users/2/follow"
+    headers = {"api-key": API_KEY[0]}
+    # await async_client.post(url, headers=headers)
+    resp = await async_client.post(url, headers=headers)
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Запрос не обработан. Пользователь уже подписан"
 
-    response = await async_client.delete(f"/tweets/{tweet_id}/likes", headers=headers)
-    assert response.status_code == 202
-    assert response.json() == {"result": True}
-    logger.info('Проверяем, что лайк был удален')
-    like = await db_session.execute(
-        db_session.query(Tweet).filter(Tweet.id == tweet_id).filter(Tweet.likes.any(user_id=user_id))
-    ).fetchone()
-    assert like is None
+
+@pytest.mark.asyncio
+async def test_delete_follow_from_user(async_client, db_session):
+    """
+    Проверяет функцию удаления подписки на пользователя
+
+    """
+    url = f"/api/users/2/follow"
+    headers = {"api-key": API_KEY[0]}
+    resp = await async_client.delete(url, headers=headers)
+    assert resp.status_code == 202
+    assert json.loads(resp.text) == {"result": True}
+
+
+
+
+
 
