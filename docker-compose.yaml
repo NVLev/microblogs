@@ -1,3 +1,4 @@
+version: '3.12'
 services:
 
   pg:
@@ -27,9 +28,41 @@ services:
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
       - "5050:80"
+#  app:
+#    image: python:3.12
+#    container_name: microblog_app
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    volumes:
+#      - .:/app
+#      - static_volume:/app/static
+#      - media_volume:/app/media
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      - DATABASE_URL=postgresql://user:password@pg:5432/microblogs
+#    networks:
+#      - app-network
+#    depends_on:
+#      - pg
+#
+#  nginx:
+#    container_name: "nginx"
+#    image: nginx:latest
+#    ports:
+#      - "80:80"
+#    volumes:
+#      - ./nginx.conf:/etc/nginx/nginx.conf
+#    depends_on:
+#      - app
+#    networks:
+#      - app-network
 networks:
   app-network:
     driver: bridge
 
 volumes:
   pgdata:
+#  static_volume:
+#  media_volume:

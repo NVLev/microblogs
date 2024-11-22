@@ -1,13 +1,14 @@
 import os
 from contextlib import asynccontextmanager
-from app.base_models import Base, User, Follow, Like, Tweet
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import insert, select
 
-from app.add_data import NAMES, API_KEY
+from app.add_data import API_KEY, NAMES
 from app.api_router import router as api_router
+from app.base_models import Base, Follow, Like, Tweet, User
 from app.base_router import router as base_router
 from app.config import logger
 from app.db_helper import db_helper
@@ -37,17 +38,13 @@ async def lifespan(app: FastAPI):
         await session.commit()
 
     async with db_helper.engine.begin() as conn:
-        await conn.execute(
-            insert(Follow).values(follower_id=1, following_id=2)
-        )
-        await session.execute(
-            insert(Follow).values(follower_id=3, following_id=1)
-        )
+        await conn.execute(insert(Follow).values(follower_id=1, following_id=2))
+        await session.execute(insert(Follow).values(follower_id=3, following_id=1))
         await session.commit()
 
     async with db_helper.session_factory() as session:
-        tweet1 = Tweet(user_id=1, content = 'test content1')
-        tweet2 = Tweet(user_id=3, content = 'test content2')
+        tweet1 = Tweet(user_id=1, content="test content1")
+        tweet2 = Tweet(user_id=3, content="test content2")
         session.add_all([tweet1, tweet2])
         await session.commit()
 
@@ -59,18 +56,20 @@ async def lifespan(app: FastAPI):
 
     yield
     # shutdown
-    logger.info('Dispose engine')
+    logger.info("Dispose engine")
     await db_helper.dispose()
+
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(api_router)
-app.include_router(base_router, prefix='')
+app.include_router(base_router, prefix="")
 # app.mount("/", StaticFiles(directory="static", html=True), name="static")
-static_dir = os.path.join(os.path.dirname(__file__), 'static')
+static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 else:
     print("Static directory not found, skipping static file mount")
+
 
 @app.middleware("http")
 async def log_requests(request, call_next):
@@ -78,7 +77,6 @@ async def log_requests(request, call_next):
     response = await call_next(request)
     logger.info(f"Response status: {response.status_code}")
     return response
-
 
 
 if __name__ == "__main__":

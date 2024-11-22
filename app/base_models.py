@@ -2,8 +2,8 @@ import os
 import sys
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, MetaData, String, DateTime, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, backref
+from sqlalchemy import DateTime, ForeignKey, Integer, MetaData, String, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, backref, mapped_column, relationship
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from app.config import settings
@@ -14,8 +14,10 @@ class Base(DeclarativeBase):
         naming_convention=settings.db.naming_convention,
     )
 
+
 class User(Base):
     """Модель, описывающая пользователей"""
+
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -23,19 +25,16 @@ class User(Base):
     api_key: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
 
     # one-to-many с моделью Tweet (твиты пользователя)
-    tweets = relationship(
-        "Tweet", back_populates="author", cascade="all, delete-orphan"
-    )
+    tweets = relationship("Tweet", back_populates="author", cascade="all, delete-orphan")
 
     # юзер подписан на, фолловеры - many-to-many
     following = relationship(
-        'User',
-        secondary='follow',
-        primaryjoin='User.id == Follow.follower_id',
-        secondaryjoin='User.id == Follow.following_id',
-        backref=backref('followers')
+        "User",
+        secondary="follow",
+        primaryjoin="User.id == Follow.follower_id",
+        secondaryjoin="User.id == Follow.following_id",
+        backref=backref("followers"),
     )
-
 
     likes = relationship("Like", back_populates="user", cascade="all, delete-orphan")
 
@@ -45,16 +44,19 @@ class User(Base):
 
 class Follow(Base):
     """Модель, описывающая подписку"""
+
     __tablename__ = "follow"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    #id пользователя, который подписался
+    # id пользователя, который подписался
     follower_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
     # id пользователя, на которого подписались
     following_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
 
     __table_args__ = (
-        UniqueConstraint('follower_id', 'following_id', name='unique_follow_relationship'),
+        UniqueConstraint(
+            "follower_id", "following_id", name="unique_follow_relationship"
+        ),
     )
 
     def __repr__(self):
@@ -63,6 +65,7 @@ class Follow(Base):
 
 class Tweet(Base):
     """Модель, описывающая твиты"""
+
     __tablename__ = "tweets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -74,7 +77,9 @@ class Tweet(Base):
 
     author = relationship("User", back_populates="tweets")
     # Отношение "один ко многим" с моделью Like (лайки твита)
-    likes = relationship("Like", back_populates="tweet", cascade="all, delete-orphan, delete")
+    likes = relationship(
+        "Like", back_populates="tweet", cascade="all, delete-orphan, delete"
+    )
     image = relationship("Image", back_populates="tweet", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -86,7 +91,9 @@ class Like(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    tweet_id: Mapped[int] = mapped_column(Integer, ForeignKey("tweets.id"), nullable=False)
+    tweet_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tweets.id"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="likes")

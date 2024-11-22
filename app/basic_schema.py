@@ -1,20 +1,18 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
-
-from typing import List, Optional
-
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, validator
 
 
 class ResultBase(BaseModel):
     result: bool
 
+
 class UserBase(BaseModel):
     id: int
     name: str
     # api_key: str
+
 
 class UserData(BaseModel):
     id: int
@@ -27,20 +25,24 @@ class UserRead(BaseModel):
     result: bool
     user: UserData
 
+
 class UserCreate(UserBase):
     api_key: str
+
 
 class LikeBase(BaseModel):
     id: int
     user_id: int
-    
+
+
 class ImageBase(BaseModel):
     url: str
+
 
 class TweetBase(BaseModel):
     id: int
     content: str
-    attachments: Optional[List[str]| None] = None
+    attachments: Optional[List[str] | None] = None
     author: UserBase
     likes: List[LikeBase]
 
@@ -54,9 +56,11 @@ class TweetCreate(BaseModel):
     tweet_data: str
     image_ids: Optional[list[int] | None] = None
 
+
 class TweetResponse(BaseModel):
     result: bool
     tweet_id: int
+
 
 class MediaRead(BaseModel):
     result: bool
@@ -66,6 +70,7 @@ class MediaRead(BaseModel):
 class FollowingCreate(BaseModel):
     following_id: int
 
+
 class LikeAdd(BaseModel):
     user_id: int
     tweet_id: int
@@ -74,8 +79,3 @@ class LikeAdd(BaseModel):
 class FollowBase(BaseModel):
     follower_id: int
     following_id: int
-
-
-
-
-

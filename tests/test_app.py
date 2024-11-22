@@ -1,18 +1,18 @@
+import asyncio
 import json
 import os
+
 import aiofiles
 import pytest
-import asyncio
-from httpx import AsyncClient
 from fastapi import UploadFile
-from app.add_data import API_KEY, NAMES
-
-from app.base_models import Tweet
-from app.config import logger
-from sqlalchemy import select, and_
+from httpx import AsyncClient
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.functions import get_media, add_like
+from app.add_data import API_KEY, NAMES
+from app.base_models import Tweet
+from app.config import logger
+from app.functions import add_like, get_media
 
 
 @pytest.mark.asyncio
@@ -31,6 +31,7 @@ async def test_get_user(async_client, db_session):
         },
     }
 
+
 @pytest.mark.asyncio
 async def test_get_tweets(async_client, db_session):
     url = "/api/tweets"
@@ -39,6 +40,7 @@ async def test_get_tweets(async_client, db_session):
     assert resp.status_code == 200
     assert len(json.loads(resp.text)) >= 1
 
+
 @pytest.mark.asyncio
 async def test_create_tweet(async_client, db_session):
     url = "/api/tweets"
@@ -46,7 +48,7 @@ async def test_create_tweet(async_client, db_session):
     data = {"tweet_data": "Test tweet", "image_ids": [1, 2]}
     resp = await async_client.post(url, headers=headers, json=data)
     assert resp.status_code == 200
-    assert json.loads(resp.text)['result'] is True
+    assert json.loads(resp.text)["result"] is True
 
 
 @pytest.mark.asyncio
@@ -77,26 +79,20 @@ async def test_post_like_to_tweet(async_client, db_session):
     tweet_id = 1
     api_key = API_KEY[0]
     headers = {"api-key": api_key}
-    logger.info('Проверяем, что лайк не существует')
+    logger.info("Проверяем, что лайк не существует")
     query = select(Tweet).where(
-        and_(
-            Tweet.id == tweet_id,
-            Tweet.likes.any(user_id=user_id)
-        )
+        and_(Tweet.id == tweet_id, Tweet.likes.any(user_id=user_id))
     )
     result = await db_session.execute(query)
     like = result.scalar_one_or_none()
     assert like is None
 
-    logger.info('Отправляем запрос на добавление лайка')
+    logger.info("Отправляем запрос на добавление лайка")
     await add_like(user_id=user_id, tweet_id=tweet_id, session=db_session)
 
-    logger.info('Проверяем, что лайк был добавлен')
+    logger.info("Проверяем, что лайк был добавлен")
     query = select(Tweet).where(
-        and_(
-            Tweet.id == tweet_id,
-            Tweet.likes.any(user_id=user_id)
-        )
+        and_(Tweet.id == tweet_id, Tweet.likes.any(user_id=user_id))
     )
     result = await db_session.execute(query)
     like = result.scalar_one_or_none()
@@ -115,6 +111,7 @@ async def test_delete_tweet(async_client, db_session):
     assert resp.status_code == 202
     assert json.loads(resp.text) == {"result": True}
 
+
 @pytest.mark.asyncio
 async def test_post_follow_to_user(async_client, db_session):
     """
@@ -125,7 +122,8 @@ async def test_post_follow_to_user(async_client, db_session):
     headers = {"api-key": API_KEY[1]}
     resp = await async_client.post(url, headers=headers)
     assert resp.status_code == 202
-    assert json.loads(resp.text)['result'] is True
+    assert json.loads(resp.text)["result"] is True
+
 
 @pytest.mark.asyncio
 async def test_post_follow_to_user_already_following(async_client, db_session):
@@ -154,9 +152,3 @@ async def test_delete_follow_from_user(async_client, db_session):
     resp = await async_client.delete(url, headers=headers)
     assert resp.status_code == 202
     assert json.loads(resp.text) == {"result": True}
-
-
-
-
-
-

@@ -1,10 +1,11 @@
 from functools import wraps
-from typing import Any, Dict, Callable
-from starlette.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
-from fastapi import HTTPException
+from typing import Any, Callable, Dict
 
-from config import logger
+from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
+from starlette.responses import JSONResponse
+
+from app.config import logger
 
 
 def handle_api_errors():
@@ -19,8 +20,8 @@ def handle_api_errors():
                     content={
                         "result": False,
                         "error_type": "AuthenticationError",
-                        "error_message": str(e.detail)
-                    }
+                        "error_message": str(e.detail),
+                    },
                 )
             except SQLAlchemyError as e:
                 logger.error(f"Ошибка базы данных: {str(e)}", exc_info=True)
@@ -29,8 +30,8 @@ def handle_api_errors():
                     content={
                         "result": False,
                         "error_type": "DatabaseError",
-                        "error_message": str(e)
-                    }
+                        "error_message": str(e),
+                    },
                 )
             except Exception as e:
                 logger.error(f"Неожиданная ошибка: {str(e)}", exc_info=True)
@@ -39,8 +40,10 @@ def handle_api_errors():
                     content={
                         "result": False,
                         "error_type": e.__class__.__name__,
-                        "error_message": str(e)
-                    }
+                        "error_message": str(e),
+                    },
                 )
+
         return wrapper
+
     return decorator

@@ -1,6 +1,7 @@
 import os
 import sys
 from typing import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -9,9 +10,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from app.config import settings, logger
-
-
+from app.config import logger, settings
 
 # from module_26_fastapi.homework.config.config import settings
 

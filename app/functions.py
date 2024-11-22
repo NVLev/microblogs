@@ -1,19 +1,20 @@
 import os
 from typing import Optional, Type
 
-from fastapi import HTTPException, status, UploadFile
-from sqlalchemy import select, insert, delete, func, update
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, InstrumentedAttribute, load_only
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from fastapi import HTTPException, UploadFile, status
 from pydantic import ValidationError
+from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute, load_only, selectinload
 
-from app.base_models import User, Tweet, Like, Follow, Image
-from app.basic_schema import UserRead, TweetBase, UserBase, LikeBase, ResultBase, UserData
+from app.base_models import Follow, Image, Like, Tweet, User
+from app.basic_schema import LikeBase, ResultBase, TweetBase, UserBase, UserData, UserRead
 from app.config import logger
 
+
 async def get_api_key(request):
-    logger.info('Начали процесс получение апи ключа')
+    logger.info("Начали процесс получение апи ключа")
     api_key = request.headers.get("Authorization")
     if not api_key:
         raise HTTPException(
@@ -25,17 +26,14 @@ async def get_api_key(request):
 
 async def get_user_id_by_api_key(
     session: AsyncSession, api_key: str
-) -> InstrumentedAttribute[int] | None:
-    logger.info('Стартанули получение id ')
+) -> int | None:
+    logger.info("Стартанули получение id ")
     try:
-        stmt = (
-            select(User)
-            .where(User.api_key == api_key)
-        )
+        stmt = select(User).where(User.api_key == api_key)
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
         if user:
-            logger.info(f'user id - {user.id}')
+            logger.info(f"user id - {user.id}")
             return user.id
         return None
     except ValidationError as e:
@@ -46,11 +44,10 @@ async def get_user_id_by_api_key(
         await session.rollback()
         raise HTTPException(status_code=500, detail="Database error")
 
-async def get_user_by_id(
-    session: AsyncSession, user_id: int
-) -> Optional[UserData]:
+
+async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[UserData]:
     try:
-        logger.info('Начали выполнение функции по получению объекта Юзера')
+        logger.info("Начали выполнение функции по получению объекта Юзера")
         stmt = select(User).where(User.id == user_id)
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
@@ -58,20 +55,33 @@ async def get_user_by_id(
         if user is None:
             return None
 
-        logger.info('Начали получение фолловеров юзера')
-        followers_stmt = select(User).join(Follow, User.id == Follow.follower_id).where(Follow.following_id == user_id)
+        logger.info("Начали получение фолловеров юзера")
+        followers_stmt = (
+            select(User)
+            .join(Follow, User.id == Follow.follower_id)
+            .where(Follow.following_id == user_id)
+        )
         followers_result = await session.execute(followers_stmt)
-        followers_data = [UserBase(id=f.id, name=f.name) for f in followers_result.scalars()]
-        logger.info(f'Получены фолловеры {followers_data}')
+        followers_data = [
+            UserBase(id=f.id, name=f.name) for f in followers_result.scalars()
+        ]
+        logger.info(f"Получены фолловеры {followers_data}")
 
-        logger.info('Начали получение списка тех, на кого подписан юзер')
-        following_stmt = select(User).join(Follow, User.id == Follow.following_id).where(Follow.follower_id == user_id)
+        logger.info("Начали получение списка тех, на кого подписан юзер")
+        following_stmt = (
+            select(User)
+            .join(Follow, User.id == Follow.following_id)
+            .where(Follow.follower_id == user_id)
+        )
         following_result = await session.execute(following_stmt)
-        following_data = [UserBase(id=f.id, name=f.name) for f in following_result.scalars()]
-        logger.info(f'Юзер подписан на {following_data}')
+        following_data = [
+            UserBase(id=f.id, name=f.name) for f in following_result.scalars()
+        ]
+        logger.info(f"Юзер подписан на {following_data}")
 
-
-        user_data = UserData(id=user.id, name=user.name, followers=followers_data, following=following_data)
+        user_data = UserData(
+            id=user.id, name=user.name, followers=followers_data, following=following_data
+        )
         return user_data
 
     except SQLAlchemyError as e:
@@ -81,30 +91,26 @@ async def get_user_by_id(
         logger.exception(f"Ошибка получения юзера: {e}")
         return None
 
-async def get_tweet_by_id(
-    session: AsyncSession, tweet_id: int
-) -> Tweet | None:
-    stmt = (
-        select(Tweet)
-        .where(Tweet.id == tweet_id)
-    )
+
+async def get_tweet_by_id(session: AsyncSession, tweet_id: int) -> Tweet | None:
+    stmt = select(Tweet).where(Tweet.id == tweet_id)
     result = await session.execute(stmt)
     tweet = result.scalar_one_or_none()
     if tweet:
-        logger.info(f'Твит {tweet} получен')
+        logger.info(f"Твит {tweet} получен")
         return tweet
     return None
 
+
 async def write_new_tweet(user_id: id, content: str, session: AsyncSession) -> id:
-    logger.info('Начали процесс получения ид')
-    stmt = (
-        insert(Tweet).values(user_id=user_id, content=content).returning(Tweet.id)
-    )
+    logger.info("Начали процесс получения ид")
+    stmt = insert(Tweet).values(user_id=user_id, content=content).returning(Tweet.id)
     result = await session.execute(stmt)
     tweet_id = result.scalar_one()
     await session.commit()
-    logger.info(f'tweet id - {tweet_id}')
+    logger.info(f"tweet id - {tweet_id}")
     return tweet_id
+
 
 async def update_tweet_with_media(
     media_ids: list[int],
@@ -122,6 +128,7 @@ async def update_tweet_with_media(
         error_message = e
         raise HTTPException(status_code=400, detail={error_message})
 
+
 async def get_media(file_url: str, session: AsyncSession) -> Image | None:
     stmt = select(Image).where(Image.url == file_url)
     image = await session.execute(stmt)
@@ -129,9 +136,10 @@ async def get_media(file_url: str, session: AsyncSession) -> Image | None:
     return image
 
 
-async def save_media(session: AsyncSession, file: UploadFile, user_id: int, file_url: str):
+async def save_media(
+    session: AsyncSession, file: UploadFile, user_id: int, file_url: str
+):
     try:
-
 
         stmt = insert(Image).values(url=file_url).returning(Image.id)
         image_id = await session.execute(stmt)
@@ -151,44 +159,46 @@ async def save_media(session: AsyncSession, file: UploadFile, user_id: int, file
         raise HTTPException(status_code=400, detail=f"Ошибка базы данных: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при сохранениии файла: {e}")
-                            
+
+
 async def get_tweets_info(session: AsyncSession):
     select_query = (
-        select(Tweet)
-        .options(
+        select(Tweet).options(
             load_only(Tweet.id, Tweet.content),
             selectinload(Tweet.author),
-            selectinload(Tweet.likes)
+            selectinload(Tweet.likes),
         )
         # .options(selectinload(Tweet.likes))
     )
     result = await session.execute(select_query)
     tweets = result.scalars().all()
-    logger.info(f'Получили твиты {tweets}')
+    logger.info(f"Получили твиты {tweets}")
     tweet_responses = []
     for tweet in tweets:
-        logger.info(f'Вносим в список {tweet}')
+        logger.info(f"Вносим в список {tweet}")
         tweet_responses.append(
             TweetBase(
                 id=tweet.id,
                 content=tweet.content,
                 author=UserBase(id=tweet.author.id, name=tweet.author.name),
-                likes=[LikeBase(id=like.id, user_id=like.user_id) for like in tweet.likes],
+                likes=[
+                    LikeBase(id=like.id, user_id=like.user_id) for like in tweet.likes
+                ],
             )
         )
-    return {
-        "result": True,
-        "tweets": tweet_responses  # Set the 'tweets' field
-    }
+    return {"result": True, "tweets": tweet_responses}  # Set the 'tweets' field
+
 
 async def add_like(user_id: int, tweet_id: int, session: AsyncSession):
     try:
-        logger.info(f'Функция добавления лайка для user id {user_id}, tweet id {tweet_id} запущена')
+        logger.info(
+            f"Функция добавления лайка для user id {user_id}, tweet id {tweet_id} запущена"
+        )
         new_like = Like(user_id=user_id, tweet_id=tweet_id)
         session.add(new_like)
         await session.commit()
         await session.refresh(new_like)
-        logger.info(f'ID лайка: {new_like.id}')
+        logger.info(f"ID лайка: {new_like.id}")
         return new_like.id
     except ValidationError as e:
         logger.error(f"Ошибка валидации Pydantic: {e}")
@@ -197,8 +207,6 @@ async def add_like(user_id: int, tweet_id: int, session: AsyncSession):
         logger.error(f"Ошибка базы данных: {e}")
         await session.rollback()
         raise HTTPException(status_code=500, detail="Database error")
-
-
 
 
 async def delete_like(user_id: int, tweet_id: int, session: AsyncSession):
@@ -213,39 +221,45 @@ async def delete_tweet_by_id(tweet_id: int, session: AsyncSession) -> None:
     await session.execute(stmt)
     await session.commit()
 
-async def delete_following_by_id(follower_id: int, following_id: int, session: AsyncSession) -> None:
+
+async def delete_following_by_id(
+    follower_id: int, following_id: int, session: AsyncSession
+) -> None:
     stmt = delete(Follow).where(
-        Follow.follower_id == follower_id,
-        Follow.following_id == following_id
+        Follow.follower_id == follower_id, Follow.following_id == following_id
     )
     await session.execute(stmt)
     await session.commit()
-    logger.info('Подписка благополучно удалилась')
+    logger.info("Подписка благополучно удалилась")
+
 
 async def check_follow_user(user_id: int, following_id: int, session: AsyncSession):
     """Проверяет наличие подписки на пользователя."""
 
-    logger.info('Начали выполнение проверки')
+    logger.info("Начали выполнение проверки")
     result = await session.execute(
-        select(func.count(Follow.id)).where(Follow.follower_id == user_id, Follow.following_id == following_id)
+        select(func.count(Follow.id)).where(
+            Follow.follower_id == user_id, Follow.following_id == following_id
+        )
     )
     count = result.scalar_one()
-    logger.info(f'Получили количество подписок: {count}')
+    logger.info(f"Получили количество подписок: {count}")
     return count > 0
 
 
-async def create_follow_to_user(follower_id: int, following_id: int, session: AsyncSession) -> bool:
+async def create_follow_to_user(
+    follower_id: int, following_id: int, session: AsyncSession
+) -> bool:
     """Создает новую подписку на пользователя."""
     try:
-        logger.info('Начали создание новой подписки')
+        logger.info("Начали создание новой подписки")
 
         stmt = insert(Follow).values(follower_id=follower_id, following_id=following_id)
         await session.execute(stmt)
         await session.commit()
-        logger.info('Подписка создана')
+        logger.info("Подписка создана")
         return True
     except SQLAlchemyError as e:
         await session.rollback()
         logger.error(f"Ошибка создания подписки: {e}")
         return False
-
