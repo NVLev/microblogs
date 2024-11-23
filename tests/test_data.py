@@ -13,7 +13,7 @@ NAMES = [
     "Slava Zaitsev",
     "Luda Prihodko",
 ]
-API_KEY = ["test_api", "api_test"]
+API_KEY = ["test", "api_test"]
 
 
 @pytest.mark.asyncio

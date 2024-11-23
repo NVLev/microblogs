@@ -1,5 +1,9 @@
 docker-compose up -d
 docker-compose logs pg
+docker-compose build --no-cache
+docker-compose exec pg bash
+exit
+docker-compose up --build -d
 
 [alembic]
 alembic init -t async migration

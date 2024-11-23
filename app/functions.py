@@ -3,7 +3,7 @@ from typing import Optional, Type
 
 from fastapi import HTTPException, UploadFile, status
 from pydantic import ValidationError
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, select, update, Result
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, load_only, selectinload
@@ -129,22 +129,21 @@ async def update_tweet_with_media(
         raise HTTPException(status_code=400, detail={error_message})
 
 
-async def get_media(file_url: str, session: AsyncSession) -> Image | None:
+async def get_media(file_url: str, session: AsyncSession) -> Optional[Image]:
     stmt = select(Image).where(Image.url == file_url)
-    image = await session.execute(stmt)
-    image = image.scalars().one_or_none()
+    result: Result = await session.execute(stmt)
+    image: Optional[Image] = result.scalars().one_or_none()
     return image
 
 
 async def save_media(
     session: AsyncSession, file: UploadFile, user_id: int, file_url: str
-):
+)-> Optional[int]:
     try:
-
         stmt = insert(Image).values(url=file_url).returning(Image.id)
-        image_id = await session.execute(stmt)
+        result = await session.execute(stmt)
         await session.commit()
-        image_id = image_id.scalar_one()
+        image_id: Optional[int] = result.scalar_one()
 
         if not os.path.exists("media"):
             os.makedirs("media")

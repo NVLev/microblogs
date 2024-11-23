@@ -8,4 +8,4 @@ NAMES = [
     "Katya Vetrova",
     "Masha Petrova",
 ]
-API_KEY = ["api123", "api231", "api2345", "api54321", "api3456", "api6543", "api4567"]
+API_KEY = ["test", "api231", "api234", "api123", "api432", "api6543", "api4567"]
