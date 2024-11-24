@@ -14,5 +14,9 @@
   </ul>
   <p>Реализованы тесты pytest</p>  
    <p>Запуск приложения: docker-compose </p>  
-   
-  
+  <h2>Стек проекта:</h2> 
+  <p>FastAPI, Poetry, PostgreSQL, SQLAlchemy, Alembic, Pytest, Docker, Docker-compose </p>  
+  <h2>!Дисклеймер!</h2> 
+<p>Фронтенд от стороннего разработчика</p>
+<h2>Особенности:</h2>
+Документация на русском языке
