@@ -13,7 +13,7 @@
   <li>Удаление подписки на пользователя</li>
   </ul>
   <p>Реализованы тесты pytest</p>  
-   <p>Запуск приложения: docker-compose </p>  
+   <p>Запуск приложения: docker-compose up -d</p>  
   <h2>Стек проекта:</h2> 
   <p>FastAPI, Poetry, PostgreSQL, SQLAlchemy, Alembic, Pytest, Docker, Docker-compose </p>  
   <h2>!Дисклеймер!</h2> 
